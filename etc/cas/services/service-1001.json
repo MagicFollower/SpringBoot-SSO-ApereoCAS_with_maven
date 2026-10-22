@@ -1,0 +1,20 @@
+{
+  "@class": "org.apereo.cas.services.CasRegisteredService",
+  "serviceId": "^http://localhost:9001/.*$",
+  "name": "retail-demo",
+  "id": 1001,
+  "description": "零售条线演示系统",
+  "evaluationOrder": 10,
+  "logoutType": "BACK_CHANNEL",
+  "logoutUrl": "http://localhost:9001/logout",
+  "properties": {
+    "@class": "java.util.HashMap",
+    "channelCode": {
+      "@class": "org.apereo.cas.services.DefaultRegisteredServiceProperty",
+      "values": ["java.util.HashSet", ["RETAIL"]]
+    }
+  },
+  "accessStrategy": {
+    "@class": "com.example.sso.cas.ChannelAccessStrategy"
+  }
+}

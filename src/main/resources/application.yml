@@ -1,0 +1,60 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /cas
+  ssl:
+    enabled: false
+
+sso:
+  datasource:
+    url: "${CAS_DB_URL:jdbc:mysql://localhost:3306/cas_sso?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8}"
+    username: "${CAS_DB_USER:root}"
+    password: "${CAS_DB_PASSWORD:}"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  service-dir: ${CAS_SERVICE_DIR:./etc/cas/services}
+  admin:
+    token: ${CAS_ADMIN_TOKEN:}
+
+cas:
+  server:
+    name: http://localhost:8080
+    prefix: ${cas.server.name}/cas
+
+  tgc:
+    secure: false
+    # 仅本地 HTTP 调试使用；生产环境必须启用并配置签名/加密密钥
+    crypto:
+      enabled: false
+
+  authn:
+    accept:
+      # 临时排查时可设为 true 使用 CAS 自带演示账号；正常联调必须为 false
+      enabled: ${CAS_ACCEPT_AUTH:false}
+    jdbc:
+      query:
+        - url: ${sso.datasource.url}
+          user: ${sso.datasource.username}
+          password: ${sso.datasource.password}
+          driver-class: ${sso.datasource.driver-class-name}
+          dialect: org.hibernate.dialect.MySQLDialect
+          sql: "SELECT username, password_hash, (enabled = 0) AS disabled FROM t_user WHERE username = ?"
+          field-password: password_hash
+          field-disabled: disabled
+          password-encoder:
+            type: BCRYPT
+
+  service-registry:
+    core:
+      init-from-json: true
+    json:
+      location: "file:${sso.service-dir}"
+      watcher-enabled: true
+
+  # 单点登出必须同步等待业务系统回调，确保本地会话在请求返回前失效
+  slo:
+    disabled: false
+    asynchronous: false
+
+  # 登出完成后按 service 参数跳回已注册的业务系统
+  logout:
+    follow-service-redirects: true

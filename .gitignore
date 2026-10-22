@@ -1,0 +1,72 @@
+# ---- Build output ----------------------------------------------------------
+target/
+build/
+dist/
+coverage/
+.nyc_output/
+*.class
+*.hprof
+
+# ---- Dependencies and package-manager caches -------------------------------
+node_modules/
+.pnpm-store/
+.yarn/
+.vite/
+.cache/
+
+# npm / yarn / pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Runtime data ----------------------------------------------------------
+logs/
+*.log
+hs_err_pid*
+replay_pid*
+*.pid
+.run/
+.tmp/
+build/tomcat/
+
+# ---- Local secrets and environment ----------------------------------------
+# Keep bin/env.example.cmd; only local copies are ignored.
+bin/env.cmd
+bin/env.local.cmd
+.env
+.env.*
+!.env.example
+*.local
+.npmrc.local
+
+# ---- CAS external service registry temp files -----------------------------
+# ServiceDefinitionService writes service-*.tmp before atomic move.
+etc/cas/services/*.tmp
+
+# ---- IDE / editor ----------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+.apt_generated/
+.sts4-cache/
+*.code-workspace
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+*.bak
+
+# ---- OS-specific -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk

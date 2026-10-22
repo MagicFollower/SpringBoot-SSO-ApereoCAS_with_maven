@@ -1,0 +1,49 @@
+:root {
+  --erp-aside-width: 224px;
+  --erp-aside-bg: #1d2b3a;
+  --erp-aside-bg-active: #2f80ed;
+  --erp-aside-text: #b9c4d0;
+  --erp-page-bg: #f4f6f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  background: var(--erp-page-bg);
+  color: #303133;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--erp-aside-bg-active);
+  text-decoration: none;
+}
+
+.page-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 6px rgba(24, 42, 66, 0.06);
+}
+
+.page-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.page-desc {
+  margin: 0 0 18px;
+  color: #909399;
+  font-size: 13px;
+}

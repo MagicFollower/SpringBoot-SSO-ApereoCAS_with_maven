@@ -1,0 +1,37 @@
+server:
+  port: 8084
+  address: 127.0.0.1
+
+spring:
+  application:
+    name: admin-server
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      url: "${ADMIN_DB_URL:jdbc:mysql://localhost:3306/cas_sso?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8}"
+      username: "${ADMIN_DB_USER:root}"
+      password: "${ADMIN_DB_PASSWORD:}"
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      initial-size: 2
+      min-idle: 2
+      max-active: 10
+      max-wait: 5000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      time-between-eviction-runs-millis: 60000
+      filters: stat,wall
+      stat-view-servlet:
+        enabled: false
+
+admin:
+  token: "${ADMIN_UI_TOKEN:}"
+  service-dir: "${ADMIN_SERVICE_DIR:../etc/cas/services}"
+  control:
+    base-url: "${ADMIN_CONTROL_BASE:http://127.0.0.1:8080/cas/admin/control}"
+    token: "${ADMIN_CONTROL_TOKEN:}"
+    timeout-seconds: 5
+
+logging:
+  level:
+    com.example.admin: INFO
