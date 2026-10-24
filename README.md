@@ -4,6 +4,126 @@
 
 > 逐文件代码地图、类/方法解析、请求链路与改动指南见 [代码地图与解析.md](代码地图与解析.md)。本文侧重构建、运行、接口契约与联调验收。
 
+## 总体架构与交互流程（5 服务总览）
+
+> 五个服务的端口、协议、绑定与调用关系一图速览。HTTPS 双端口细节见 [CAS-HTTPS启用方案.md](CAS-HTTPS启用方案.md)。
+
+### 服务与端口明细
+
+| 服务 | 端口 | 协议 / 绑定 | 技术栈 | 职责 |
+|---|---|---|---|---|
+| **CAS** | **8083** | HTTPS / 全部网卡 | Apereo CAS 7.3.8.3 war（内嵌 Tomcat 11，JDK 21） | 浏览器唯一入口：登录页、票据签发、TGC、SLO 发起 |
+| **CAS（同进程）** | **8080** | HTTP / 仅 `127.0.0.1` | 同上 | 服务间端点：`/p3/serviceValidate` 票据校验、`/cas/admin/control/**` 控制面、脚本探活 |
+| **admin-server** | **8084** | HTTP / 仅 `127.0.0.1` | Spring Boot fat jar | 管理数据面：条线/用户/授权/服务/会话管理，以控制令牌代理 CAS 控制面 |
+| **sso-admin-web** | **5174** | HTTP / localhost | Vue3 + Vite + Element Plus | 管理界面；`/api` 同源反代到 8084 |
+| **erp-server** | **8081** | HTTP / localhost | Spring Boot 3.3 + Druid + tk-mapper | ERP 业务后端（context-path `/erp`）：登录回调、业务 API、SLO 接收 |
+| **erp-web** | **5173** | HTTP / localhost | Vue3 + Vite + Element Plus | ERP 业务前端；`/erp/api`、`/erp/login`、`/erp/logout` 反代到 8081 |
+
+> MySQL 8.4（`cas_sso` 库）为共用依赖：CAS 认证与控制面、admin-server 数据面、erp-server 业务表都连它；各服务经 JDBC 直连，图中不逐一画出。
+
+### 组件架构图
+
+```mermaid
+flowchart LR
+    U(("用户浏览器"))
+
+    subgraph MA["同机部署 —— SSO 核心与管理台"]
+        subgraph CASS["CAS（单 war 进程，双 connector）"]
+            C83["HTTPS :8083 全网卡<br/>浏览器唯一入口<br/>/cas/login · /cas/logout<br/>TGC：Secure+HttpOnly"]
+            C80["HTTP :8080 仅 127.0.0.1<br/>服务间端点<br/>/p3/serviceValidate<br/>/cas/admin/control/**"]
+        end
+        ADM["admin-server<br/>HTTP 127.0.0.1:8084<br/>管理数据面 /api/**"]
+        AW["sso-admin-web :5174<br/>Vue3 管理界面<br/>/api 同源反代"]
+        DB[("MySQL 8.4<br/>cas_sso")]
+    end
+
+    subgraph ERP["同机部署 —— ERP 演示系统"]
+        ES["erp-server :8081（/erp）<br/>业务 API + 登录回调 + SLO 接收"]
+        EW["erp-web :5173<br/>Vue3 业务前端<br/>/erp/** 反代"]
+    end
+
+    U -->|"页面"| EW
+    U -->|"页面"| AW
+    U -->|"登录 / 免登直通 / 登出<br/>（携带 TGC）"| C83
+    EW -->|"反代 /erp/api /erp/login /erp/logout"| ES
+    AW -->|"反代 /api"| ADM
+    ES -->|"302 引导浏览器跳 CAS<br/>（cas.server.name）"| U
+    ES -->|"ST 校验：本机回环 HTTP"| C80
+    ADM -->|"控制面代理 + ADMIN_CONTROL_TOKEN"| C80
+    C80 -.->|"SLO 背通道回调<br/>POST /erp/logout/slo"| ES
+    CASS --- DB
+    ADM --- DB
+    ES --- DB
+```
+
+### ERP 登录交互时序（SSO 核心流程）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户浏览器
+    participant EW as erp-web :5173
+    participant ES as erp-server :8081
+    participant CAS as CAS :8083(浏览器) / :8080(服务间)
+    participant DB as MySQL cas_sso
+
+    U->>EW: 打开 ERP 页面
+    EW->>ES: 反代 GET /erp/api/session
+    ES-->>EW: authenticated=false → 302 /erp/login/cas
+    U->>ES: GET /erp/login/cas（经反代）
+    ES-->>U: 302 → https://localhost:8083/cas/login?service=…&channelCode=ERP
+    U->>CAS: GET /cas/login（HTTPS，无 TGC 时出登录页）
+    U->>CAS: 提交账号密码
+    CAS->>DB: t_user 认证（BCrypt）+ t_user_channel 条线准入
+    CAS-->>U: Set-Cookie TGC（Secure/HttpOnly）+ 302 callback?ticket=ST-xxx
+    U->>ES: GET /erp/login/callback?ticket=ST-xxx（经反代）
+    ES->>CAS: GET http://127.0.0.1:8080/cas/p3/serviceValidate（回环校验 ST）
+    CAS-->>ES: authenticationSuccess + username
+    ES->>ES: 创建 ERPSESSION，登记 SLO 会话索引
+    ES-->>U: 302 → http://localhost:5173/login?cas=ok
+    U->>EW: 此后业务请求只携带 ERPSESSION（不再经过 CAS）
+```
+
+### TGT/TGC 的生成、存储与流转
+
+> TGT 从不出 CAS 进程；浏览器持有的是它的加密引用 TGC。密钥来源见 [CAS-HTTPS启用方案.md](CAS-HTTPS启用方案.md) §4.4。
+
+```mermaid
+flowchart TB
+    subgraph GEN["① 生成（首次凭据登录成功）"]
+        LOGIN["浏览器 POST /cas/login<br/>账号密码 → JDBC+BCrypt 认证<br/>+ ChannelAccessStrategy 条线准入"]
+        LOGIN --> TGT["创建 TGT（TGT-Id）<br/>含 principal、过期策略、<br/>已接入服务列表"]
+        TGT -->|"加密(encKey)+HMAC(signKey)<br/>打包为 JWT 串"| TGC["TGC Cookie<br/>Set-Cookie: Path=/cas/;<br/>Secure; HttpOnly; SameSite=None"]
+    end
+
+    subgraph STORE["② 存储（位置不对称）"]
+        TGT -.->|"原文仅存于"| REG["CAS 票据注册表<br/>（本项目：JVM 内存）<br/>重启即失 → 全员掉线"]
+        TGC -.->|"密文引用存于"| BROWSER["浏览器 Cookie 库<br/>（读不到原文，JS 因 HttpOnly 被禁）"]
+    end
+
+    subgraph FLOW["③ 流转（免登直通）"]
+        BROWSER -->|"GET /cas/login?service=…<br/>浏览器自动携带（仅 HTTPS+path /cas/）"| VERIFY["CAS 解密+验签 TGC"]
+        VERIFY -->|"通过 → 不出登录页，<br/>按 service 签发一次性 ST"| ST["ST-xxx 302 → 业务回调"]
+        VERIFY -->|"解不开/过期/已踢"| RELOGIN["重新出登录页"]
+        ST --> VAL["业务端回环调 /p3/serviceValidate<br/>校验后建本地会话（ERPSESSION）"]
+    end
+
+    subgraph END["④ 终止（三条消亡路径）"]
+        LOGOUT["用户登出 /cas/logout<br/>或管理员踢下线"] -->|"销毁 TGT +<br/>Set-Cookie Max-Age=0"| DEL["TGT 删除，旧 TGC 永久失效"]
+        EXPIRE["过期策略到期<br/>（TGT 硬超时/闲置超时）"] --> DEL
+        RESTART["CAS 重启（内存注册表清空）"] --> DEL
+    end
+
+    VERIFY -.->|"每次直通都读"| REG
+    DEL -.->|"SLO 通知各业务<br/>销毁本地会话"| VAL
+```
+
+要点：**TGT 是服务端的会话真相，TGC 只是它的加密影子**——加密使其防篡改防伪造，
+签名使 CAS 敢于凭它恢复会话；也因此密钥（`CAS_TGC_ENCRYPTION_KEY`/`CAS_TGC_SIGNING_KEY`）
+一旦变化，全部影子瞬间作废。携带范围规则见术语章[容易混淆的关系](#6-容易混淆的关系)。
+
+> 上述两图的 HTTPS/证书主题细节（8083 connector、守卫过滤器、证书信任）见 [CAS-HTTPS启用方案.md](CAS-HTTPS启用方案.md)；SLO 与踢下线时序见下文[单点登出（SLO）](#单点登出slo)与[强制踢下线](#强制踢下线)章节。
+
 ## 已实现并验证
 
 - Apereo CAS 7.3.8.3 + Maven WAR overlay
