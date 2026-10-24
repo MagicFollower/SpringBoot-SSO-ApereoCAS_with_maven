@@ -1,40 +1,58 @@
 <template>
-  <el-container class="layout">
-    <el-aside class="layout-aside" :width="'var(--erp-aside-width)'">
-      <div class="aside-brand">
-        <el-icon :size="22"><OfficeBuilding /></el-icon>
-        <span>ERP 企业资源平台</span>
+  <div class="shell" :class="{ 'is-collapsed': collapsed }">
+    <aside class="shell__side" :class="{ 'is-collapsed': collapsed }">
+      <div class="shell__brand">
+        <span class="shell__logo" data-g2-exempt>E</span>
+        <span v-show="!collapsed" class="ds-h3">ERP 企业资源平台</span>
       </div>
+
       <el-menu
-        class="aside-menu"
+        class="shell__menu"
         :default-active="route.path"
-        background-color="transparent"
-        text-color="#b9c4d0"
-        active-text-color="#ffffff"
-        :collapse="false"
+        :collapse="collapsed"
+        :collapse-transition="false"
         router
       >
         <sidebar-menu-item v-for="item in store.menus" :key="item.id" :item="item" />
       </el-menu>
-      <div class="aside-footer">
-        <span>channelCode：{{ store.user?.channelCode ?? '-' }}</span>
-      </div>
-    </el-aside>
 
-    <el-container>
-      <el-header class="layout-header">
-        <div class="header-left">
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item>ERP</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ route.meta.title ?? '首页' }}</el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-        <div class="header-right">
-          <el-tag class="sso-tag" type="success" effect="plain" size="small">CAS 单点登录</el-tag>
+      <div class="shell__side-foot">
+        <el-tooltip :content="collapsed ? store.user?.channelCode ?? '-' : ''" placement="top" :disabled="!collapsed">
+          <div v-show="!collapsed" class="ds-caption side-channel">
+            channelCode：{{ store.user?.channelCode ?? '-' }}
+          </div>
+        </el-tooltip>
+        <el-button
+          text
+          :icon="collapsed ? Expand : Fold"
+          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+          @click="collapsed = !collapsed"
+        />
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="shell__header">
+        <el-button
+          class="shell__burger"
+          text
+          :icon="Menu"
+          aria-label="打开菜单"
+          @click="mobileOpen = true"
+        />
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item>ERP</el-breadcrumb-item>
+          <el-breadcrumb-item>{{ route.meta.title ?? '首页' }}</el-breadcrumb-item>
+        </el-breadcrumb>
+        <div class="shell__header-actions">
+          <el-tooltip :content="dark ? '切换到亮色模式' : '切换到暗色模式'" placement="bottom">
+            <el-button text :icon="dark ? Sunny : Moon" aria-label="切换明暗主题" @click="toggleDark" />
+          </el-tooltip>
+          <el-tag type="success" effect="plain">CAS 单点登录</el-tag>
           <el-dropdown @command="handleCommand">
-            <span class="user-chip">
-              <el-avatar :size="28" class="user-avatar">{{ avatarText }}</el-avatar>
-              <span class="user-name">{{ store.displayName }}</span>
+            <span class="shell__user">
+              <el-avatar :size="28" class="shell__avatar">{{ avatarText }}</el-avatar>
+              <span class="ds-body">{{ store.displayName }}</span>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -48,32 +66,56 @@
             </template>
           </el-dropdown>
         </div>
-      </el-header>
+      </header>
 
-      <el-main class="layout-main">
-        <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+      <main class="shell__content">
+        <router-view v-slot="{ Component, route: r }">
+          <transition name="ds-page" mode="out-in" appear>
+            <component :is="Component" :key="r.path" />
+          </transition>
+        </router-view>
+      </main>
+    </div>
+
+    <el-drawer v-model="mobileOpen" direction="ltr" size="240px" :with-header="false">
+      <el-menu :default-active="route.path" router @select="mobileOpen = false">
+        <sidebar-menu-item v-for="item in store.menus" :key="item.id" :item="item" />
+      </el-menu>
+    </el-drawer>
+  </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { ArrowDown, Expand, Fold, Menu, Moon, Sunny, SwitchButton } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
+import { applyTheme } from '../styles/theme'
+import { toast } from '../composables/use-toast'
 import SidebarMenuItem from './SidebarMenuItem.vue'
+
+const PRIMARY = '#2F80ED'
 
 const route = useRoute()
 const store = useUserStore()
+const collapsed = ref(false)
+const mobileOpen = ref(false)
+const dark = ref(document.documentElement.classList.contains('dark'))
 
 const avatarText = computed(() => (store.displayName || '?').slice(0, 1).toUpperCase())
+
+function toggleDark() {
+  dark.value = !dark.value
+  localStorage.setItem('erp_theme', dark.value ? 'dark' : 'light')
+  applyTheme(PRIMARY, dark.value)
+}
 
 onMounted(async () => {
   try {
     await store.loadMenus()
   } catch (error) {
-    ElMessage.error(`菜单加载失败：${error.message}`)
+    toast.error(`菜单加载失败：${error.message}`)
   }
 })
 
@@ -95,93 +137,137 @@ async function handleCommand(command) {
 </script>
 
 <style scoped>
-.layout {
-  height: 100%;
+.shell {
+  --side-w: 240px;
+  display: grid;
+  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--el-bg-color-page);
 }
 
-.layout-aside {
+.shell.is-collapsed {
+  --side-w: 64px;
+}
+
+.shell__side {
   display: flex;
   flex-direction: column;
-  background: var(--erp-aside-bg);
+  width: var(--side-w);
+  border-right: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.aside-brand {
+.shell__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 60px;
-  padding: 0 18px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: var(--space-2);
+  height: 64px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.aside-menu {
+.shell__logo {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-weight: 600;
+  /* 品牌角标为正圆，登记 G2 例外 */
+  border-radius: 50%;
+}
+
+.shell__menu {
   flex: 1;
   overflow-y: auto;
-  border-right: none;
-  padding: 8px 0;
+  border-right: 0;
+  padding-top: var(--space-2);
 }
 
-.aside-menu :deep(.el-menu-item),
-.aside-menu :deep(.el-sub-menu__title) {
-  height: 44px;
-  line-height: 44px;
-  font-size: 14px;
-}
-
-.aside-menu :deep(.el-menu-item.is-active) {
-  background: var(--erp-aside-bg-active);
-  border-radius: 6px;
-  margin: 0 8px;
-}
-
-.aside-footer {
-  padding: 12px 18px;
-  color: #7d8b9a;
-  font-size: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.layout-header {
+.shell__side-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 60px;
-  padding: 0 20px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(24, 42, 66, 0.06);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.side-channel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.user-chip {
+.shell__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.shell__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
+  height: 64px;
+  padding: 0 var(--space-6);
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
+  position: sticky;
+  top: 0;
+  z-index: var(--el-index-top);
+}
+
+.shell__header-actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shell__user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   cursor: pointer;
-  color: #303133;
   outline: none;
 }
 
-.user-avatar {
-  background: #2f80ed;
+.shell__avatar {
+  background: var(--el-color-primary);
   color: #fff;
-  font-size: 13px;
 }
 
-.user-name {
-  font-size: 14px;
+.shell__content {
+  flex: 1;
+  min-width: 0;
 }
 
-.layout-main {
-  padding: 20px;
-  overflow-y: auto;
+.shell__burger {
+  display: none;
+}
+
+@media (max-width: 839px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell__side {
+    display: none;
+  }
+
+  .shell__burger {
+    display: inline-flex;
+  }
+
+  .shell__header {
+    padding: 0 var(--space-4);
+  }
 }
 </style>

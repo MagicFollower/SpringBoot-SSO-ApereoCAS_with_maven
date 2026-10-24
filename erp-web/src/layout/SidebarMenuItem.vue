@@ -25,5 +25,7 @@ const props = defineProps({
   }
 })
 
-const hasChildren = computed(() => Array.isArray(props.item.children) && props.item.children.length > 0)
+const hasChildren = computed(
+  () => Array.isArray(props.item.children) && props.item.children.length > 0
+)
 </script>

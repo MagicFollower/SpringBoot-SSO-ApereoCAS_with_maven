@@ -16,10 +16,10 @@
 - 单点登出（SLO）：CAS 注销 TGT 后同步回调业务系统，注销业务本地会话
 - 强制踢下线：管理台按用户枚举 TGT，触发 SLO 并删除会话，业务本地会话同步失效
 - 两个条线示例服务（RETAIL / CREDIT）和 Node 演示客户端
-- ERP 演示系统：`erp-server`（Spring Boot 3 + Druid + tk-mapper + MySQL）与 `erp-web`（Vue3 + Vite + Element Plus）接入 CAS
+- ERP 演示系统：`erp-server`（Spring Boot 3 + Druid + tk-mapper + MySQL）与 `erp-web`（Vue3 + Vite + Element Plus 2.14.7，按 Element Plus 设计规范实现）接入 CAS
 - 管理台三服务拆分（P1）：新增 `/cas/admin/control/**` 控制面（会话、踢下线、服务删除），仅回环地址可访问
 - admin-server（P2）：Spring Boot fat jar（`127.0.0.1:8084`）承接管理数据面，并以控制令牌代理 CAS 控制面
-- admin-web（P3）：独立 Vue3 + Vite + Element Plus 管理界面（5174），经同源反代调用 admin-server，令牌只存 `sessionStorage`
+- admin-web（P3）：独立 Vue3 + Vite + Element Plus 2.14.7 管理界面（5174），按 Element Plus 设计规范实现（设计令牌、4dp 间距、G2 圆角、顶部提示三态、禁遮罩关闭弹窗、暗色模式），经同源反代调用 admin-server，令牌只存 `sessionStorage`
 - 管理台收敛（P4）：移除 CAS 旧 `/cas/admin/api/**` 与内置静态管理台，CAS 只保留回环控制面；同步更新构建与配置说明
 - 条线用户（P5）：新增“条线用户”菜单，按条线查询、加入、编辑授权状态/有效期、撤销与恢复；支持页内快速新增/编辑条线
 - 用户管理（P6）：新增“用户管理”菜单，分页查询、新增、编辑、停用与彻底删除 `t_user`；密码使用 BCrypt 且只写不读；删除级联条线授权，停用/删除时尽力注销 CAS 会话
@@ -69,7 +69,7 @@
 | 改进 | 落地位置 | 说明 |
 |---|---|---|
 | ERP 后端 | `erp-server/` | Spring Boot 3.3 + Druid + tk-mapper + MySQL，登录登出、用户查询、菜单查询接口；channelCode 固定 ERP |
-| ERP 前端 | `erp-web/` | Vue3 声明式（`<script setup>`）+ Vite + Element Plus + Pinia；默认走 CAS 登录页，回调后进主页按菜单渲染 |
+| ERP 前端 | `erp-web/` | Vue3 声明式（`<script setup>`）+ Vite + Element Plus 2.14.7（设计规范基线）+ Pinia；默认走 CAS 登录页，回调后进主页按菜单渲染 |
 | CAS 服务注册 | `etc/cas/services/service-3001.json` | `serviceId=^http://localhost:8081/erp/.*$`，BACK_CHANNEL，`logoutUrl=/erp/logout/slo` |
 | 菜单条线隔离 | `erp_menu.channel_code` | 公共菜单（NULL）+ 本条线专属（ERP），树形下发 |
 | 登出回跳 | `application.yml`、`AuthController` | 回跳地址用已注册的 `/erp/`，再由后端 302 回前端；CAS 开启 `cas.logout.follow-service-redirects` |
@@ -100,7 +100,7 @@
 ├── demo/
 │   └── cas-client.mjs                         # 两个条线的演示客户端
 ├── erp-server/                                 # ERP 后端演示（Spring Boot + Druid + tk-mapper + MySQL）
-├── erp-web/                                    # ERP 前端演示（Vue3 + Vite + Element Plus）
+├── erp-web/                                    # ERP 前端演示（Vue3 + Vite + Element Plus 2.14.7 设计规范）
 ├── admin-server/                               # 管理台数据面（Spring Boot fat jar，127.0.0.1:8084）
 ├── sso-admin-web/                              # 管理台前端（Vue3 + Vite + Element Plus，5174，/api 反代 8084）
 ├── etc/cas/services/                           # 外置 CAS 服务注册表（可热加载）
@@ -424,6 +424,8 @@ java -jar target/admin-server-1.0.0-SNAPSHOT.jar
 
 独立 Vue3 工程 `sso-admin-web/`，开发态监听 5174，`/api` 反向代理到 `127.0.0.1:8084`，浏览器与后端同源，无 CORS。
 
+界面按 Element Plus 设计规范实现（基线 `element-plus@2.14.7`）：设计令牌统一（9 档 4dp 间距、圆角档、六级排版）、G2 连续曲率圆角（`corner-shape: squircle` 全局规则 + 正圆例外登记）、顶部提示三态（`toast.info/warn/error`，业务层不直接调 `ElMessage`）、弹窗统一 `AppDialog`（默认禁止点击遮罩关闭）、卡片优先布局（`.ds-page` + `el-card`）、分页固定在数据 Grid 右下角（`.ds-data-grid`）、表单字段级校验（`:model` + `prop` + `:rules`）、路由 `ds-page` 过渡与 `prefers-reduced-motion` 降级、暗色模式（`html.dark` + 顶栏切换 + 首屏防闪白）。
+
 > Windows 可用 `bin\build-admin-web.cmd` 构建，`bin\start-admin-web.cmd` 以 Vite preview 托管 `dist` 并监听 5174。
 
 ```bash
@@ -692,7 +694,7 @@ curl -s -X POST -H "X-Admin-Token: $TOKEN" \
 除 9001/9002 两个极简客户端外，仓库内还有一套完整的前后端演示系统，用来验证「CAS 单点登录 + 条线准入 + 完整业务系统」的整体链路：
 
 - `erp-server/`：Spring Boot 3.3 + Druid + tk.mybatis(mapper) + MySQL，提供登录登出、用户查询、菜单查询等基础 ERP 接口；
-- `erp-web/`：Vue3（`<script setup>` 声明式语法）+ Vite + Element Plus + Pinia + vue-router 的企业级界面。
+- `erp-web/`：Vue3（`<script setup>` 声明式语法）+ Vite + Element Plus 2.14.7 + Pinia + vue-router 的企业级界面；UI 按 Element Plus 设计规范实现（设计令牌、4dp 间距、G2 圆角、顶部提示三态、暗色模式、路由过渡）。
 
 条线恒为 `channelCode = ERP`；CAS 服务定义见 `etc/cas/services/service-3001.json`（`serviceId = ^http://localhost:8081/erp/.*$`，`logoutType = BACK_CHANNEL`，`logoutUrl = http://localhost:8081/erp/logout/slo`）。
 
@@ -701,7 +703,7 @@ curl -s -X POST -H "X-Admin-Token: $TOKEN" \
 | 层 | 技术 |
 |---|---|
 | 后端 | Spring Boot 3.3.2、Druid 1.2.28（stat/wall 过滤器）、tk.mybatis mapper-spring-boot-starter 5.0.2、MySQL Connector/J、Lombok、JDK 21 |
-| 前端 | Vue 3.5、Vite 6、vue-router 4、Pinia 2、Element Plus 2.9（中文 locale）、Axios |
+| 前端 | Vue 3.5、Vite 6、vue-router 4、Pinia 2、Element Plus 2.14.7（中文 locale，设计规范基线）、Axios |
 | 会话 | 服务端 HttpSession（cookie `ERPSESSION`，HttpOnly + SameSite=Lax，30 分钟），维护 ST → session 索引供 SLO 注销 |
 
 ```text
