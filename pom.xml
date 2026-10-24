@@ -134,6 +134,16 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- 仅编译期使用：CasHttpsConnectorConfig 引用 Tomcat connector API。
+             版本必须与 cas-server-webapp-tomcat 运行时的 Tomcat 11.0.24 一致，
+             防止 lib-provided 里混入旧版本造成类遮蔽（曾导致 SSL connector 静默失效）。 -->
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-core</artifactId>
+            <version>11.0.24</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

@@ -17,7 +17,7 @@ spring:
     druid:
       url: "${ERP_DB_URL:jdbc:mysql://localhost:3306/cas_sso?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8}"
       username: "${ERP_DB_USER:root}"
-      password: "${ERP_DB_PASSWORD:}"
+      password: "${ERP_DB_PASSWORD:Mysql12345}"
       driver-class-name: com.mysql.cj.jdbc.Driver
       initial-size: 2
       min-idle: 2

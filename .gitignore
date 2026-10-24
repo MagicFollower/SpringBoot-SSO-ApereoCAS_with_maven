@@ -73,3 +73,6 @@ Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *.lnk
+
+etc/cas/keystore.p12
+etc/cas/localhost.cer

@@ -1,11 +1,21 @@
 server:
   port: 8080
+  # 主 connector（HTTP）只服务同机调用方（admin-server 控制面代理、本机脚本）。
+  # 绑定回环：跨机服务（erp-server）一律走 HTTPS 8083，杜绝 ST 明文跨网传输。
+  address: 127.0.0.1
   servlet:
     context-path: /cas
   ssl:
+    # 主 connector 保持 HTTP（仅回环）；浏览器与跨机调用走 CasHttpsConnectorConfig 追加的 8083
     enabled: false
 
 sso:
+  # 浏览器 HTTPS 入口（CasHttpsConnectorConfig 消费）；绑定全部网卡，供浏览器与本机以外的服务调用
+  https:
+    enabled: true
+    port: 8083
+    keystore: etc/cas/keystore.p12
+    keystore-password: ${CAS_KEYSTORE_PASSWORD:changeit}
   datasource:
     url: "${CAS_DB_URL:jdbc:mysql://localhost:3306/cas_sso?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8}"
     username: "${CAS_DB_USER:root}"
@@ -17,14 +27,19 @@ sso:
 
 cas:
   server:
-    name: http://localhost:8080
+    # 浏览器侧对外地址（HTTPS）；服务间调用继续用 http://localhost:8080
+    name: ${CAS_SERVER_NAME:https://localhost:8083}
     prefix: ${cas.server.name}/cas
 
   tgc:
-    secure: false
-    # 仅本地 HTTP 调试使用；生产环境必须启用并配置签名/加密密钥
+    secure: true
+    # TGC Cookie 加密签名；密钥由环境变量注入（bin/env.cmd），缺失时启动会自动生成并告警
     crypto:
-      enabled: false
+      enabled: true
+      encryption:
+        key: ${CAS_TGC_ENCRYPTION_KEY:}
+      signing:
+        key: ${CAS_TGC_SIGNING_KEY:}
 
   authn:
     accept:
@@ -42,6 +57,10 @@ cas:
           field-disabled: disabled
           password-encoder:
             type: BCRYPT
+            # CAS 的 BCRYPT 默认 strength=16（单次认证约 4 秒 CPU 计算）；
+            # BCrypt 强度基准测试显示本机各强度耗时——强度 10: 105ms / 12: 238ms / 14: 950ms / 15: 1904ms / 16: 3829ms。
+            # 显式降到 10（约 100ms）——与 admin-server 生成哈希的 $2a$10$ 前缀一致
+            strength: 10
 
   service-registry:
     core:

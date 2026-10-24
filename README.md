@@ -238,12 +238,15 @@ java -jar target/cas.war
 
 启动后访问：
 
-- 登录页：`http://localhost:8080/cas/login`
+- 登录页（浏览器，HTTPS）：`https://localhost:8083/cas/login` —— 已启用自签证书与 TGC 加密，无「非安全连接」横幅（详见 [CAS-HTTPS启用方案.md](CAS-HTTPS启用方案.md)）
+- 登录页（服务间，HTTP）：`http://localhost:8080/cas/login` —— erp-server / demo / 脚本使用，页面保留非安全提示属预期
 - 管理台：先启动 admin-server，再启动 `sso-admin-web`，打开 `http://localhost:5174/gate`
 
 - `CAS_ACCEPT_AUTH` 默认 `false`。临时排查时可设为 `true` 使用 CAS 自带演示认证，联调结束后务必关闭。
 - `CAS_DB_PASSWORD` 没有默认值；数据库账号有密码时必须设置。
 - `CAS_ADMIN_TOKEN` 没有默认值；未设置时控制面返回 503。
+- `CAS_TGC_ENCRYPTION_KEY` / `CAS_TGC_SIGNING_KEY` 未设置时 CAS 每次启动自动生成临时密钥，重启后所有会话失效；`bin/env.cmd` 已预置。
+- HTTPS 证书：`etc/cas/keystore.p12`（自签，SAN=localhost，密码 `CAS_KEYSTORE_PASSWORD`，默认 changeit）；首次使用需把证书导入浏览器受信任根（实施时已导入 CurrentUser Root）。
 - 控制面与 admin-server 都只接受请求头 `X-Admin-Token`；生产环境必须走 HTTPS，并在反向代理层限制来源。
 - 也可以把 `target/cas.war` 部署到外部 Tomcat 10.1。
 
@@ -549,7 +552,7 @@ DELETE FROM cas_sso.t_channel WHERE channel_code = 'UITEST';
 - SLO 依赖业务系统的 `logoutUrl` 可达且实现正确；回调失败时 CAS 仍会注销 TGT，但业务本地会话可能残留，当前没有重试队列。
 - 无状态 JWT/纯客户端 Cookie 无法被远程吊销；业务系统必须使用服务端 session、吊销列表或短 TTL。
 - 当前使用内存票据注册表，`getSessionsFor` 为全量扫描；多节点部署必须换成共享票据注册表，并为按用户踢下线维护索引。Redis 等共享方案的收益、代价与触发条件见 [Redis集成评估.md](Redis集成评估.md)。
-- 本地配置关闭了 TGC 加密并允许 HTTP；生产环境必须启用 HTTPS、开启 TGC 加密/签名并配置固定密钥。
+- 浏览器入口已启用 HTTPS（自签证书 + TGC 加密签名，`https://localhost:8083/cas`，见 [CAS-HTTPS启用方案.md](CAS-HTTPS启用方案.md)）；服务间调用仍走 HTTP 8080 但**已绑定回环**——跨机调用（如独立部署的 erp-server）必须走 HTTPS 8083 并导入 CAS 证书，三机部署清单见方案文档「三机部署拓扑」。生产环境需替换为 CA 签发证书、配置固定 TGC 密钥。
 - 当前是单条线单 `channelCode` 的绑定模型；如果同一系统需要多个条线，需要扩展为多对多绑定。
 - 文件 watcher 只处理新增和修改；直接删除 `etc/cas/services/*.json` 不会卸载已加载服务，必须走管理台删除或重启 CAS。
 - 管理台只有共享令牌，没有操作人身份、角色和操作审计；不要直接暴露到公网。
