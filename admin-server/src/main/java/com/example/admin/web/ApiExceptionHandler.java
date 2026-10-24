@@ -30,6 +30,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ControlCallException.class)
     public ResponseEntity<ApiResult<Void>> controlFailure(final ControlCallException e) {
         LOGGER.warn("Control plane call failed with status [{}]: {}", e.getStatus(), e.getMessage());
+        if (e.getStatus() == HttpStatus.UNAUTHORIZED.value()
+                || e.getStatus() == HttpStatus.FORBIDDEN.value()) {
+            // 上游鉴权失败不能伪装成管理 API 的 401，否则前端会清掉有效的 UI 令牌并跳回入口。
+            final String hint = e.getStatus() == HttpStatus.UNAUTHORIZED.value()
+                    ? "CAS 控制面鉴权失败（检查 ADMIN_CONTROL_TOKEN 与 CAS_ADMIN_TOKEN 是否一致）"
+                    : "CAS 控制面拒绝访问（控制面仅允许回环地址）";
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(ApiResult.fail(HttpStatus.BAD_GATEWAY.value(),
+                            hint + "：" + e.getMessage()));
+        }
         return ResponseEntity.status(e.getStatus())
                 .body(ApiResult.fail(e.getStatus(), e.getMessage()));
     }

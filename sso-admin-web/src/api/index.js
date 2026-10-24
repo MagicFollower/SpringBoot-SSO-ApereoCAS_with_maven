@@ -63,6 +63,20 @@ export const api = {
   grant: (username, data) => http.post(`/users/${encodeURIComponent(username)}/grants`, data),
   revoke: (username, channelCode) =>
     http.delete(`/users/${encodeURIComponent(username)}/grants/${encodeURIComponent(channelCode)}`),
+  userAccounts: (params) => http.get('/user-accounts', { params }),
+  createUserAccount: (data) => http.post('/user-accounts', data),
+  updateUserAccount: (username, data) =>
+    http.put(`/user-accounts/${encodeURIComponent(username)}`, data),
+  deleteUserAccount: (username) =>
+    http.delete(`/user-accounts/${encodeURIComponent(username)}`),
+  channelUsers: (code, params) =>
+    http.get(`/channels/${encodeURIComponent(code)}/users`, { params }),
+  addChannelUser: (code, data) =>
+    http.post(`/channels/${encodeURIComponent(code)}/users`, data),
+  updateChannelUser: (code, username, data) =>
+    http.put(`/channels/${encodeURIComponent(code)}/users/${encodeURIComponent(username)}`, data),
+  removeChannelUser: (code, username) =>
+    http.delete(`/channels/${encodeURIComponent(code)}/users/${encodeURIComponent(username)}`),
   services: () => http.get('/services'),
   createService: (data) => http.post('/services', data),
   deleteService: (id) => http.delete(`/services/${id}`),

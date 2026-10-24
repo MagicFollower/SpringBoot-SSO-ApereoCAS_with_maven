@@ -16,9 +16,11 @@ if not errorlevel 1 goto port_used
 
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 if not exist "%ROOT%\.run" mkdir "%ROOT%\.run"
+set "STDINFILE=%ROOT%\.run\admin-web.stdin"
+type nul > "%STDINFILE%"
 
 echo [admin-web] starting preview server...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath 'node.exe' -ArgumentList '%VITE%','preview','--host','localhost','--port','5174' -WorkingDirectory '%WEBROOT%' -RedirectStandardOutput '%LOGDIR%\admin-web.out.log' -RedirectStandardError '%LOGDIR%\admin-web.err.log' -PassThru -WindowStyle Hidden; Set-Content -Path '%PIDFILE%' -Value $p.Id"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath 'node.exe' -ArgumentList '%VITE%','preview','--host','localhost','--port','5174' -WorkingDirectory '%WEBROOT%' -RedirectStandardInput '%STDINFILE%' -RedirectStandardOutput '%LOGDIR%\admin-web.out.log' -RedirectStandardError '%LOGDIR%\admin-web.err.log' -PassThru -WindowStyle Hidden; Set-Content -Path '%PIDFILE%' -Value $p.Id"
 if errorlevel 1 goto start_failed
 
 set /a WAIT=0

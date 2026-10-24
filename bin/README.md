@@ -2,7 +2,7 @@
 
 > 本文件是 `bin/` 目录的 README。除特别说明外，命令均在仓库根目录执行。
 >
-> 适用版本：2026-10-23。本文对应 `bin/` 下的 Windows cmd 脚本，覆盖 CAS、admin-server、admin-web 三个服务；ERP 演示系统仍按 [README](../README.md) 手工启动。
+> 适用版本：2026-10-24。本文对应 `bin/` 下的 Windows cmd 脚本，覆盖 CAS、admin-server、admin-web 三个服务；ERP 演示系统仍按 [README](../README.md) 手工启动。
 
 ## 1. 前置条件
 
@@ -23,12 +23,26 @@
 copy bin\env.example.cmd bin\env.cmd
 ```
 
-编辑 `bin\env.cmd`，填入本机真实值：
+编辑 `bin\env.cmd`，按需填写本机真实值：
 
 ```bat
-set "JAVA_HOME=C:\path\to\jdk-21"
+rem 可选：不写则沿用当前 Windows 环境里的 JAVA_HOME。
+rem 仅当默认 JDK 不是 21 时才需要显式指定。
+rem set "JAVA_HOME=C:\Program Files\Java\jdk-21"
+
+rem 可选：CAS 数据源覆盖。不写则使用 localhost:3306/cas_sso。
+rem set "CAS_DB_URL=jdbc:mysql://localhost:3306/cas_sso?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8"
+rem set "CAS_DB_USER=root"
+rem
+rem 可选：admin-server 数据源覆盖。可以与 CAS 指向不同主机或库。
+rem set "ADMIN_DB_URL=jdbc:mysql://localhost:3306/cas_sso?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8"
+rem set "ADMIN_DB_USER=root"
+
+rem 必填：两个数据源的密码（可相同）
 set "CAS_DB_PASSWORD=..."
 set "ADMIN_DB_PASSWORD=..."
+
+rem 必填：三个令牌，作用见下表
 set "CAS_ADMIN_TOKEN=..."
 set "ADMIN_UI_TOKEN=..."
 set "ADMIN_CONTROL_TOKEN=..."
@@ -36,11 +50,20 @@ set "ADMIN_CONTROL_TOKEN=..."
 
 规则：
 
+- `JAVA_HOME` 可以不配置：脚本优先使用 `bin\env.cmd` 的值，未配置时沿用当前命令行/系统环境里的 `JAVA_HOME`。两者都没有或不是 JDK 21 时，脚本会提示并退出。默认 JDK 已是 21 时无需重复配置。
+- `CAS_DB_URL` / `CAS_DB_USER` 与 `ADMIN_DB_URL` / `ADMIN_DB_USER` 都是可选项，分别对应 CAS 与 admin-server 的 Spring 数据源。不配置时使用各自的 `application.yml` 默认值（`jdbc:mysql://localhost:3306/cas_sso`，用户 `root`）。
+- 需要把两个服务的数据源指向不同主机或不同库时，分别覆盖 URL 与用户即可；URL 必须带完整查询参数（`useSSL`、`allowPublicKeyRetrieval`、`serverTimezone`、`characterEncoding`），否则可能出现时区或公钥检索错误。两个库的表结构都来自 `db/schema.sql`。
 - `ADMIN_DB_PASSWORD` 与 `CAS_DB_PASSWORD` 可以相同，取决于数据库账号。
-- `ADMIN_CONTROL_TOKEN` 必须与 `CAS_ADMIN_TOKEN` 一致，否则 admin-server 调控制面会 401。
+- 三个令牌的作用：
+
+| 变量 | 作用 | 未配置/不一致时 |
+|---|---|---|
+| `CAS_ADMIN_TOKEN` | CAS 控制面 `/cas/admin/control/**` 的调用令牌；admin-server 用 `X-Admin-Token` 携带它查询会话、执行踢下线、删除服务 | 控制面返回 503 |
+| `ADMIN_UI_TOKEN` | 管理前端访问 admin-server `/api/**` 时使用的令牌 | 管理 API 返回 503 |
+| `ADMIN_CONTROL_TOKEN` | admin-server 调用 CAS 控制面时实际使用的令牌，**必须与 `CAS_ADMIN_TOKEN` 相同** | 不一致时控制面返回 401 |
+
 - `bin\env.cmd` 已加入 `.gitignore`，**不要提交真实密码或令牌**。
 - 未创建 `env.cmd` 时，脚本仍会尝试使用当前命令行已有的环境变量；缺少必需变量会给出提示并退出。
-- 若本机默认 `java -version` 不是 21，必须通过 `JAVA_HOME` 指向 JDK 21；脚本会拒绝在 JDK 8 下构建/启动。
 
 ## 3. 脚本清单
 
@@ -115,6 +138,7 @@ bin\start-admin-web.cmd
 - 启动前检查对应端口是否已监听；已占用则直接退出，避免重复启动。
 - 后台运行，不弹出新窗口；标准输出/错误写入 `logs\<service>.out.log` 与 `logs\<service>.err.log`。
 - 进程 PID 写入 `.run\<service>.pid`。
+- admin-web 启动时把 node 的 stdin 重定向到空文件 `.run\admin-web.stdin`，避免 `vite preview` 在 TTY 下绑定快捷键、抢占当前 cmd 的键盘输入。
 - CAS 最多等待 60 秒直到 `/cas/login` 返回 200；admin-server 等待 8084 可连接；admin-web 等待 5174 返回 200。
 - 超时会自动调用对应停止脚本并返回非 0。
 
@@ -175,15 +199,17 @@ admin_web_proxy=200
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `JDK 21 is required` | `JAVA_HOME` 指向 JDK 8 或未设置 | 修改 `bin\env.cmd`，指向 JDK 21 |
+| `JDK 21 is required` / `JAVA_HOME is not set` | `env.cmd` 与当前环境都没有 `JAVA_HOME`，或指向 JDK 8 | 在 `bin\env.cmd` 或当前 cmd 窗口把 `JAVA_HOME` 指向 JDK 21 |
 | `target\cas.war not found` | 未构建 | 执行 `bin\build-cas.cmd` |
 | `port 8080/8084/5174 is already in use` | 已有实例或别的程序占用 | 执行对应 `stop-*.cmd`，或手工确认占用进程 |
 | `ADMIN_UI_TOKEN is not set` | `env.cmd` 缺变量 | 补全后重开 cmd 窗口 |
-| admin-server 控制面调用 401 | `ADMIN_CONTROL_TOKEN` 与 `CAS_ADMIN_TOKEN` 不一致 | 改成同一令牌并重启两边 |
+| 第二/第三 TAB 操作提示“CAS 控制面鉴权失败” | `ADMIN_CONTROL_TOKEN` 与 `CAS_ADMIN_TOKEN` 不一致（admin-server 返回 502，不再跳回令牌页） | 在 `env.cmd` 中改成同一令牌并重启 CAS 与 admin-server |
+| `start-all` 后当前 cmd 窗口无法输入 | 旧版脚本让 `vite preview` 继承控制台 stdin 并绑定快捷键（日志出现 `press h + enter`） | 使用当前脚本（node stdin 已重定向到 `.run\admin-web.stdin`），重启 admin-web 即可 |
 | admin-web 打开 404 / 空白 | `dist` 未构建或未更新 | 执行 `bin\build-admin-web.cmd` 后再启动 |
 | admin-web 的 `/api` 502 | admin-server 未启动 | 先启动 admin-server，检查 8084 |
 | 构建 CAS 报文件重命名失败 | 运行中的 CAS 锁住 war | 先执行 `bin\stop-cas.cmd` |
 | `npm ci` 失败 | 网络或 npm 源不可用 | 配置 npm 镜像后重试，或改用 `npm install` |
+| 日志 `Communications link failure` | MySQL 未启动，或 `CAS_DB_URL` / `ADMIN_DB_URL` 指向的主机、端口、库不可达 | 启动 MySQL；核对两个 URL 与账号密码 |
 
 日志位置：
 
@@ -214,6 +240,44 @@ logs\admin-web.err.log
 | 重复停止 | `bin\stop-cas.cmd` | 提示 no pid file，返回 0 |
 
 > 测试中曾发现 `timeout /t` 在 PATH 含 Unix 工具时会被错误解析，脚本已改为 Windows `ping -n 2` 做等待；同时 `timeout` 在 stdin 被重定向时会报错，使用 `ping` 可同时兼容交互与自动化执行。
+
+### 参数解析实测（2026-10-24）
+
+| 检查 | 操作 | 实测结果 |
+|---|---|---|
+| `JAVA_HOME` 回退 | 临时目录不放 `env.cmd`，当前环境 `JAVA_HOME` 指向 JDK 21 | 通过 JDK 版本检查，停在 `target\cas.war not found`（说明用的是外部 `JAVA_HOME`） |
+| `env.cmd` 覆盖 | `env.cmd` 中把 `JAVA_HOME` 指向不存在的路径 | 脚本报 `JAVA_HOME is not set or invalid`，未回退到外部值，确认 `env.cmd` 优先 |
+| 模板解析 | 用 `env.example.cmd` 作为 `env.cmd` | `JAVA_HOME` 沿用外部值；`CAS_DB_URL` / `ADMIN_DB_URL` 未设置；两个密码与三个令牌均已定义 |
+| URL 解析 | 取消两行 URL 示例的注释后读取变量 | 含 `&` 的查询参数完整保留，未发生命令拆分 |
+| URL 传递 | 以覆盖的 `ADMIN_DB_URL`（追加 `useCursorFetch=true`）启动 admin-server | 日志出现 `init datasource error, url: ...&useCursorFetch=true`，确认覆盖值传到了 Java 进程 |
+
+> 最后一项执行时本机 MySQL84 服务处于停止状态，因此只验证到数据源 URL 生效，没有做 `/api/channels` 的 200 校验；连接失败符合预期。
+
+### 控制面 401 误判修复实测（2026-10-24）
+
+临时把 `ADMIN_CONTROL_TOKEN` 改成与 `CAS_ADMIN_TOKEN` 不同的值模拟配置错误，测试后已恢复一致。
+
+| 场景 | 操作 | 实测结果 |
+|---|---|---|
+| 控制面令牌不一致 | `GET /api/channels` | 200（UI 令牌有效） |
+| 控制面令牌不一致 | `GET /api/users/bob/sessions` | 502 `CAS 控制面鉴权失败（检查 ADMIN_CONTROL_TOKEN 与 CAS_ADMIN_TOKEN 是否一致）：invalid admin token` |
+| 控制面令牌不一致 | 浏览器进入“用户授权”并点击 bob | 停留在 `/users`，显示上述错误提示，`sessionStorage` 令牌未被清除 |
+| 控制面令牌一致 | `GET /api/users/bob/sessions` | 200 |
+| 控制面令牌一致 | 浏览器点击 bob | 停留在 `/users`，无错误提示，在线会话区正常显示 |
+
+修复前该请求返回 401，前端会清空令牌并跳回 `/gate`，再次进入后重复触发，即“反复弹出输入 Token”。
+
+### Vite 抢占控制台输入修复实测（2026-10-24）
+
+| 检查 | 操作 | 实测结果 |
+|---|---|---|
+| node stdin 继承 | 不重定向 stdin 启动 node，输出 `process.stdin.isTTY` | `true` |
+| node stdin 重定向 | `-RedirectStandardInput` 指向空文件 | `undefined` |
+| 修复前 Vite 日志 | 执行 `start-admin-web.cmd` | 含 `press h + enter to show help`（仅 stdin 为 TTY 时输出） |
+| 修复后 Vite 日志 | 修改脚本后执行 `start-all.cmd` | 仅 `Local: http://localhost:5174/`，无快捷键提示 |
+| 启动与停止 | `start-all.cmd` / `stop-all.cmd` | 三个服务就绪并返回 0；停止后 8080/8084/5174 均释放 |
+
+> 自动化环境无法真实敲键盘，因此以 Vite 是否绑定快捷键作为判据：只要 stdin 是 TTY，它就会建立 readline 抢占控制台输入；修复后该绑定不再发生。
 
 ## 10. 与手工方式的关系
 

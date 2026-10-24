@@ -14,16 +14,16 @@
 
 ## 2. 现状：各类状态分别放在哪里
 
-| 状态 | 当前存储 | 生命周期 | 多节点下的问题 |
-|---|---|---|---|
-| CAS TGT / ST | CAS 进程内默认票据注册表 | 由 CAS 票据 TTL 控制 | 每个节点只能看到自己的票据；换节点后 TGC 失效 |
-| CAS 服务定义 | `etc/cas/services/*.json` + 文件 watcher | 文件生命周期 | 每个 CAS 节点各读本地文件；删除需逐节点卸载运行时服务 |
-| 用户、条线、授权 | MySQL `cas_sso` | 持久 | 天然共享；每次授权查询实时读库 |
-| 登录/拒绝/踢下线审计 | MySQL `t_login_audit` | 持久 | 天然共享 |
-| ERP 本地会话 | Tomcat `HttpSession`（内存） | 默认 30 分钟 | 会话只存在处理登录的那台 ERP 节点 |
-| ERP ST → Session 索引 | `ErpSessionRegistry` 进程内 Map | 随进程 | SLO 打到其他 ERP 节点时无法失效目标会话 |
-| 管理台令牌 | 浏览器 `sessionStorage` | 标签页生命周期 | 无服务端会话，不涉及共享 |
-| 演示客户端会话 | `demo/cas-client.mjs` 进程内 Map | 随进程 | 仅用于本地演示，不涉及多节点 |
+| 状态                  | 当前存储                                   | 生命周期            | 多节点下的问题                       |
+| ------------------- | -------------------------------------- | --------------- | ----------------------------- |
+| CAS TGT / ST        | CAS 进程内默认票据注册表                         | 由 CAS 票据 TTL 控制 | 每个节点只能看到自己的票据；换节点后 TGC 失效     |
+| CAS 服务定义            | `etc/cas/services/*.json` + 文件 watcher | 文件生命周期          | 每个 CAS 节点各读本地文件；删除需逐节点卸载运行时服务 |
+| 用户、条线、授权            | MySQL `cas_sso`                        | 持久              | 天然共享；每次授权查询实时读库               |
+| 登录/拒绝/踢下线审计         | MySQL `t_login_audit`                  | 持久              | 天然共享                          |
+| ERP 本地会话            | Tomcat `HttpSession`（内存）               | 默认 30 分钟        | 会话只存在处理登录的那台 ERP 节点           |
+| ERP ST → Session 索引 | `ErpSessionRegistry` 进程内 Map           | 随进程             | SLO 打到其他 ERP 节点时无法失效目标会话      |
+| 管理台令牌               | 浏览器 `sessionStorage`                   | 标签页生命周期         | 无服务端会话，不涉及共享                  |
+| 演示客户端会话             | `demo/cas-client.mjs` 进程内 Map          | 随进程             | 仅用于本地演示，不涉及多节点                |
 
 关键代码位置：
 

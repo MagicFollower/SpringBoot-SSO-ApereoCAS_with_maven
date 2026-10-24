@@ -12,7 +12,7 @@
 - 自定义 `RegisteredServiceAccessStrategy` 实时查询用户-条线授权
 - 条线准入拒绝审计（写入 `t_login_audit`）
 - 外置 JSON 服务注册表（`etc/cas/services/`）与文件监听热加载
-- 管理台三服务：CAS 控制面 + admin-server 数据面 + admin-web 前端（条线、用户授权、接入系统、在线会话），统一 `X-Admin-Token` 鉴权
+- 管理台三服务：CAS 控制面 + admin-server 数据面 + admin-web 前端（条线、条线用户、用户管理、用户授权、接入系统、在线会话），统一 `X-Admin-Token` 鉴权
 - 单点登出（SLO）：CAS 注销 TGT 后同步回调业务系统，注销业务本地会话
 - 强制踢下线：管理台按用户枚举 TGT，触发 SLO 并删除会话，业务本地会话同步失效
 - 两个条线示例服务（RETAIL / CREDIT）和 Node 演示客户端
@@ -21,6 +21,8 @@
 - admin-server（P2）：Spring Boot fat jar（`127.0.0.1:8084`）承接管理数据面，并以控制令牌代理 CAS 控制面
 - admin-web（P3）：独立 Vue3 + Vite + Element Plus 管理界面（5174），经同源反代调用 admin-server，令牌只存 `sessionStorage`
 - 管理台收敛（P4）：移除 CAS 旧 `/cas/admin/api/**` 与内置静态管理台，CAS 只保留回环控制面；同步更新构建与配置说明
+- 条线用户（P5）：新增“条线用户”菜单，按条线查询、加入、编辑授权状态/有效期、撤销与恢复；支持页内快速新增/编辑条线
+- 用户管理（P6）：新增“用户管理”菜单，分页查询、新增、编辑、停用与彻底删除 `t_user`；密码使用 BCrypt 且只写不读；删除级联条线授权，停用/删除时尽力注销 CAS 会话
 - Windows `bin/` 脚本：CAS、admin-server、admin-web 的构建、启动、停止与批量执行，含端口检查、PID 管理与日志
 - 实测结果：
   - 正确 `channelCode` 返回 200；错配、缺失、未注册服务返回 403
@@ -166,7 +168,7 @@ Windows 下建议使用 `bin/` 脚本；环境变量集中在本地 `bin/env.cmd
 
 ```bat
 copy bin\env.example.cmd bin\env.cmd
-rem 编辑 bin\env.cmd，填写 JAVA_HOME、数据库密码与三个令牌
+rem 编辑 bin\env.cmd：JAVA_HOME 可选（默认沿用本机环境），可单独覆盖 CAS/ADMIN 数据源 URL，并填写数据库密码与三个令牌
 
 bin\build-all.cmd     rem 构建 CAS、admin-server、admin-web
 bin\start-all.cmd     rem 启动并等待三个服务就绪
@@ -180,7 +182,7 @@ bin\stop-all.cmd      rem 反向停止三个服务
 | `bin\stop-cas.cmd` / `stop-admin-server.cmd` / `stop-admin-web.cmd` | 按 PID 文件与命令行标记停止，拒绝误杀 |
 | `bin\build-all.cmd` / `start-all.cmd` / `stop-all.cmd` | 批量构建、启动、停止 |
 
-脚本会检查 JDK 21、端口占用、构建产物与必需环境变量；由脚本启动的服务可用 `bin\stop-*.cmd` 停止。完整说明、日志位置与排错表见 [bin/README.md](bin/README.md)。
+脚本会检查 JDK 21、端口占用、构建产物与必需环境变量；由脚本启动的服务可用 `bin\stop-*.cmd` 停止。`env.cmd` 未设置 `JAVA_HOME` 时沿用当前环境的 `JAVA_HOME`；`CAS_DB_URL` / `ADMIN_DB_URL` 未设置时使用各自 `application.yml` 的默认数据源。完整说明、日志位置与排错表见 [bin/README.md](bin/README.md)。
 
 ## 构建
 
@@ -378,10 +380,22 @@ curl -s -H "X-Admin-Token: $TOKEN" \
 | GET | `/api/users/{username}/grants` | 授权列表（含条线状态、有效期） |
 | POST | `/api/users/{username}/grants` | 授予或重新启用（支持 `validFrom` / `validTo`） |
 | DELETE | `/api/users/{username}/grants/{channelCode}` | 撤销授权（软删除，`status=0`） |
+| GET | `/api/channels/{channelCode}/users?q=&status=` | 条线下的用户与授权列表；`status` 取 0/1，缺省为全部 |
+| POST | `/api/channels/{channelCode}/users` | 将已有用户加入条线或恢复授权（`username`、`validFrom`、`validTo`） |
+| PUT | `/api/channels/{channelCode}/users/{username}` | 修改授权状态与有效期（`status` 取 0/1） |
+| DELETE | `/api/channels/{channelCode}/users/{username}` | 从条线撤销用户（软删除，`status=0`，可恢复） |
+| GET | `/api/user-accounts?q=&enabled=&page=&size=` | 用户账号分页列表（`enabled` 取 0/1，缺省为全部） |
+| POST | `/api/user-accounts` | 新增账号：用户名、初始密码（BCrypt）、姓名、部门、启用状态 |
+| PUT | `/api/user-accounts/{username}` | 更新姓名/部门/启用状态；密码留空不修改，填写则重置 |
+| DELETE | `/api/user-accounts/{username}` | 彻底删除账号，外键级联删除条线授权；尽力注销 CAS 会话 |
 | GET / POST | `/api/services` | 服务定义列表 / 新增（写 `etc/cas/services/*.json`，CAS watcher 热加载） |
 | DELETE | `/api/services/{id}` | 代理 CAS 控制面删除（文件 + 运行时卸载） |
 | GET | `/api/users/{username}/sessions` | 代理 CAS 控制面查询在线 TGT |
 | POST | `/api/users/{username}/kickout` | 代理 CAS 控制面踢下线（SLO + 删除票据） |
+
+控制面代理接口（`/sessions`、`/kickout`、`DELETE /services/{id}`）的失败语义：上游非 2xx 默认透传；上游 **401/403 统一映射为 502**，提示检查 `ADMIN_CONTROL_TOKEN` 与 `CAS_ADMIN_TOKEN` 是否一致。502 表示 admin-server 与 CAS 之间的鉴权问题，不是 UI 令牌失效。
+
+账号密码由 `spring-security-crypto` 的 `BCryptPasswordEncoder` 生成（与 CAS 的 `BCRYPT` 编码一致），只在写入时使用，查询接口不返回密码或哈希。
 
 环境变量与启动：
 
@@ -423,14 +437,77 @@ npm run build      # 产物在 dist/
 |---|---|
 | `/gate` | 令牌入口：输入 `ADMIN_UI_TOKEN`，先调用 `/api/channels` 校验，失败不保存 |
 | `/channels` | 条线列表与新增/编辑（`channelCode`、名称、状态、主题、MFA） |
+| `/channel-users` | 以条线为中心：选择/快速编辑条线，查询、加入、编辑、撤销与恢复该条线下的用户授权 |
+| `/user-admin` | 用户账号分页查询、新增、编辑、停用与彻底删除；密码只写不读 |
 | `/users` | 用户查询、授权列表、授予/重新启用、撤销；选中用户后查询在线会话并踢下线 |
 | `/services` | 服务定义列表、新增（id、名称、`serviceId`、条线、`logoutUrl`、`evaluationOrder`）、删除 |
+
+“条线用户”页（`/channel-users`）：
+
+- 左侧为条线列表，支持刷新、新增与快速编辑；选中后右侧加载该条线的用户授权。
+- 查询支持用户名/姓名关键字与授权状态（有效 / 已撤销）。
+- “添加用户”从 `t_user` 远程搜索，只允许已存在账号，可设置生效/失效时间；已在条线中的用户会被拒绝，需直接编辑；已撤销用户可重新添加以恢复。
+- “编辑”可修改授权状态与有效期；“撤销”为软删除（`status=0`），可随时“恢复”。
+- 账号本身的创建、停用与密码管理在“用户管理”页完成。
+
+条线用户管理验证（2026-10-24）：
+
+| 检查 | 操作 | 结果 |
+|---|---|---|
+| 菜单与加载 | 打开 `/channel-users`，选择 `UITEST` | 左侧条线、右侧用户列表正常渲染 |
+| 查询 | 关键字 `bob`；状态切到“有效” | 关键字仅返回 bob；状态“有效”无记录（两人均已撤销） |
+| 新增 | 添加已有账号 alice | 提示“用户已加入条线”，alice 显示有效 |
+| 重复新增 | 通过 API 对仍在条线中的 bob 再次添加 | 400“用户已在条线中，请直接编辑授权” |
+| 撤销后新增 | 通过 API 先撤销 bob，再重新添加 | 返回 `granted=true`，授权恢复为有效 |
+| 编辑 | 将 alice 授权状态改为已撤销并保存 | 提示“授权已更新”，行变为已撤销 |
+| 恢复 | 点击 alice 的“恢复” | 提示“授权已恢复”，行变为有效 |
+| 撤销 | 点击 alice 的“撤销”并确认 | 提示“授权已撤销”，行变为已撤销（数据库行保留） |
+| 条线快速编辑 | 修改 UITEST 名称并保存 | 提示“条线已保存”，左侧名称同步更新 |
+| 参数校验 | 不存在的 channel/user、`status=2`、生效时间晚于失效时间 | 均返回 400 与对应提示 |
+
+测试使用临时条线 `UITEST`，结束后清理（无 DDL 变更）：
+
+```sql
+DELETE FROM cas_sso.t_user_channel WHERE channel_code = 'UITEST';
+DELETE FROM cas_sso.t_channel WHERE channel_code = 'UITEST';
+```
+
+“用户管理”页（`/user-admin`）：
+
+- 分页列表（每页 10/20/50/100），支持用户名/姓名与启用状态筛选。
+- 新增账号：用户名为 2-64 位字母、数字、点、下划线或连字符；初始密码 8-64 位；用户名唯一。
+- 编辑账号：可修改姓名、部门与启用状态；密码留空表示不修改，填写则重置。
+- 密码使用 BCrypt（`$2a$10$`，与 CAS 的 `BCRYPT` 编码一致），接口不返回密码或哈希。
+- 停用或彻底删除时，尽力调用 CAS 控制面注销该用户会话；CAS 不可达只返回警告，不阻断账号操作。
+- 彻底删除 `t_user` 后，`t_user_channel` 由外键级联删除；`t_login_audit` 保留历史记录。
+
+用户管理验证（2026-10-24）：
+
+| 检查 | 操作 | 结果 |
+|---|---|---|
+| 新增 | 创建 `uitestuser` | 返回 id；数据库哈希前缀 `$2a$10$` |
+| 密码正确性 | 用 BCrypt 校验初始密码 / 重置后密码 | 初始密码 `MATCH=true`；重置后新密码 true、旧密码 false |
+| 重复创建 | 同名再次创建 | 409“用户名已存在” |
+| 编辑资料 | 修改姓名/部门但不填密码 | 更新成功，密码哈希保持不变 |
+| 停用 | `enabled=0` | 成功，`warnings=[]`；状态筛选可查到 |
+| 分页/筛选 | `page/size=1`、`enabled=0`、`q=uitest` | total 与条目正确 |
+| 参数校验 | 非法用户名、短密码、`enabled=2`、不存在的用户 | 均返回 400 与对应提示 |
+| 级联删除 | 先授权到 `UITEST`，再删除用户 | `t_user` 与对应 `t_user_channel` 行均为 0 |
+| 浏览器 | 新增/编辑/停用/删除 `uiuser2`，编辑 `uitestuser` | 页面行状态与提示正确；删除后行消失 |
+
+测试临时数据已清理（无 DDL 变更）：
+
+```sql
+DELETE FROM cas_sso.t_user WHERE username IN ('uitestuser', 'uiuser2');
+DELETE FROM cas_sso.t_channel WHERE channel_code = 'UITEST';
+```
 
 令牌与错误处理：
 
 - 令牌存 `sessionStorage`（键 `sso_admin_token`），仅当前标签页有效，关闭标签页即失效；
 - 请求自动携带 `X-Admin-Token` 与 `Cache-Control: no-store`；
-- 401 清除令牌并跳回 `/gate`；顶部“切换令牌”同样清除后回入口；
+- 仅管理 API 自身的 401 表示 UI 令牌错误：清除令牌并跳回 `/gate`；顶部“切换令牌”同样清除后回入口；
+- 控制面代理返回的 502 只展示错误消息，不清除令牌、不跳转，便于直接看到令牌不一致的提示；
 - 后端未配置 `ADMIN_UI_TOKEN` 时返回 503，入口页直接展示后端错误信息。
 
 > 生产发布：`npm run build` 后把 `dist/` 交给 Nginx 或任意静态服务托管，仍把 `/api` 反代到 `127.0.0.1:8084`；整个管理台必须放在内网或反向代理白名单之后。

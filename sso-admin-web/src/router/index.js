@@ -20,6 +20,18 @@ const routes = [
         meta: { title: '条线管理' }
       },
       {
+        path: 'channel-users',
+        name: 'channel-users',
+        component: () => import('../views/ChannelUsersView.vue'),
+        meta: { title: '条线用户' }
+      },
+      {
+        path: 'user-admin',
+        name: 'user-admin',
+        component: () => import('../views/UserAdminView.vue'),
+        meta: { title: '用户管理' }
+      },
+      {
         path: 'users',
         name: 'users',
         component: () => import('../views/UsersView.vue'),
