@@ -1,25 +1,25 @@
 <template>
-  <div>
-    <div class="page-card">
-      <div class="page-header">
-        <div>
-          <h3 class="page-title">条线管理</h3>
-          <p class="page-desc">
-            维护 <code>t_channel</code>；停用条线后该条线下所有授权立即失效。数据经 admin-server 落库。
-          </p>
-        </div>
-        <div>
-          <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-          <el-button type="primary" :icon="Plus" @click="openCreate">新增 / 更新条线</el-button>
-        </div>
+  <div class="ds-page ds-page--wide">
+    <header class="page-head">
+      <div>
+        <h1 class="ds-h1">条线管理</h1>
+        <p class="ds-caption">
+          维护 <code>t_channel</code>；停用条线后该条线下所有授权立即失效。数据经 admin-server 落库。
+        </p>
       </div>
+      <div class="ds-actions">
+        <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="open()">新增 / 更新条线</el-button>
+      </div>
+    </header>
 
-      <el-table v-loading="loading" :data="channels" border stripe>
+    <el-card shadow="never">
+      <el-table v-loading="loading" :data="channels" row-key="channelCode" stripe>
         <el-table-column prop="channelCode" label="条线代码" width="140" />
         <el-table-column prop="channelName" label="名称" min-width="160" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+            <el-tag :type="row.status === 1 ? 'success' : 'danger'" effect="plain">
               {{ row.status === 1 ? '启用' : '停用' }}
             </el-tag>
           </template>
@@ -31,22 +31,30 @@
         <el-table-column prop="updatedAt" label="更新时间" min-width="170" />
         <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button link type="primary" @click="open(row)">编辑</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty description="还没有条线，点击右上角新增" />
+        </template>
       </el-table>
-    </div>
+    </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '更新条线' : '新增 / 更新条线'" width="480px">
-      <el-form :model="form" label-width="110px">
-        <el-form-item label="条线代码" required>
+    <AppDialog
+      v-model="visible"
+      :title="mode === 'edit' ? '更新条线' : '新增 / 更新条线'"
+      width="520px"
+      destroy-on-close
+    >
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
+        <el-form-item label="条线代码" prop="channelCode">
           <el-input
             v-model="form.channelCode"
             placeholder="2-32 位大写字母、数字或下划线，字母开头"
-            :disabled="editing"
+            :disabled="mode === 'edit'"
           />
         </el-form-item>
-        <el-form-item label="名称" required>
+        <el-form-item label="名称" prop="channelName">
           <el-input v-model="form.channelName" maxlength="128" show-word-limit />
         </el-form-item>
         <el-form-item label="状态">
@@ -72,68 +80,70 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <div class="ds-actions">
+          <el-button @click="close">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        </div>
       </template>
-    </el-dialog>
+    </AppDialog>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { onMounted, ref } from 'vue'
 import { Plus, Refresh } from '@element-plus/icons-vue'
+import AppDialog from '../components/AppDialog.vue'
+import { useDialogForm } from '../composables/use-crud'
+import { toast } from '../composables/use-toast'
 import { api } from '../api'
 
 const channels = ref([])
 const loading = ref(false)
-const dialogVisible = ref(false)
-const editing = ref(false)
 const saving = ref(false)
-const form = reactive({ channelCode: '', channelName: '', status: 1, theme: '', mfaRequired: 0 })
+const formRef = ref()
+
+const { visible, mode, form, open, close } = useDialogForm({
+  channelCode: '',
+  channelName: '',
+  status: 1,
+  theme: '',
+  mfaRequired: 0,
+})
+
+const rules = {
+  channelCode: [
+    { required: true, message: '请填写条线代码', trigger: 'blur' },
+    {
+      pattern: /^[A-Z][A-Z0-9_]{1,31}$/,
+      message: '2-32 位大写字母、数字或下划线，字母开头',
+      trigger: 'blur',
+    },
+  ],
+  channelName: [{ required: true, message: '请填写名称', trigger: 'blur' }],
+}
 
 async function load() {
   loading.value = true
   try {
     channels.value = await api.channels()
   } catch (e) {
-    ElMessage.error(`加载条线失败：${e.message}`)
+    toast.error(`加载条线失败：${e.message}`)
   } finally {
     loading.value = false
   }
 }
 
-function openCreate() {
-  editing.value = false
-  Object.assign(form, { channelCode: '', channelName: '', status: 1, theme: '', mfaRequired: 0 })
-  dialogVisible.value = true
-}
-
-function openEdit(row) {
-  editing.value = true
-  Object.assign(form, {
-    channelCode: row.channelCode,
-    channelName: row.channelName,
-    status: row.status ?? 1,
-    theme: row.theme ?? '',
-    mfaRequired: row.mfaRequired ?? 0
-  })
-  dialogVisible.value = true
-}
-
 async function save() {
-  if (!form.channelCode.trim() || !form.channelName.trim()) {
-    ElMessage.warning('条线代码与名称不能为空')
-    return
-  }
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
   saving.value = true
   try {
     await api.upsertChannel({ ...form, theme: form.theme || null })
-    ElMessage.success('保存成功')
-    dialogVisible.value = false
+    toast.info('条线已保存')
+    close()
     await load()
   } catch (e) {
-    ElMessage.error(`保存失败：${e.message}`)
+    toast.error(`保存失败：${e.message}`)
   } finally {
     saving.value = false
   }
@@ -141,3 +151,12 @@ async function save() {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+</style>

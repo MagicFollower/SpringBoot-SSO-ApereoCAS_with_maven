@@ -1,13 +1,5 @@
-:root {
-  --admin-aside-width: 216px;
-  --admin-aside-bg: #17202b;
-  --admin-accent: #2f80ed;
-  --admin-page-bg: #f4f6f9;
-}
-
-* {
-  box-sizing: border-box;
-}
+/* 项目层样式：只保留设计系统未覆盖的外壳细节。
+ * 令牌（间距/圆角/排版/动效/G2）一律来自 design-system.css，不要在这里重复定义。 */
 
 html,
 body,
@@ -16,44 +8,12 @@ body,
   margin: 0;
 }
 
-body {
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
-  background: var(--admin-page-bg);
-  color: #303133;
-  -webkit-font-smoothing: antialiased;
+#app {
+  min-width: 320px;
 }
 
 code {
-  padding: 1px 6px;
-  background: #f2f3f5;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.page-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 1px 6px rgba(24, 42, 66, 0.06);
-}
-
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.page-title {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.page-desc {
-  margin: 0;
-  color: #909399;
-  font-size: 13px;
-  line-height: 1.6;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-caption-size);
 }

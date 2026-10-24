@@ -1,86 +1,127 @@
 <template>
-  <el-container class="layout">
-    <el-aside class="layout-aside" width="var(--admin-aside-width)">
-      <div class="aside-brand">
-        <el-icon :size="22"><Lock /></el-icon>
-        <div>
-          <div class="brand-title">SSO 管理台</div>
-          <div class="brand-sub">CAS 统一认证</div>
-        </div>
+  <div class="shell" :class="{ 'is-collapsed': collapsed }">
+    <aside class="shell__side" :class="{ 'is-collapsed': collapsed }">
+      <div class="shell__brand">
+        <span class="shell__logo" data-g2-exempt>S</span>
+        <span v-show="!collapsed" class="ds-h3">SSO 管理台</span>
       </div>
+
       <el-menu
-        class="aside-menu"
+        class="shell__menu"
         :default-active="route.path"
-        background-color="transparent"
-        text-color="#aab6c4"
-        active-text-color="#ffffff"
+        :collapse="collapsed"
+        :collapse-transition="false"
         router
       >
-        <el-menu-item index="/channels">
-          <el-icon><Connection /></el-icon>
-          <span>条线管理</span>
-        </el-menu-item>
-        <el-menu-item index="/channel-users">
-          <el-icon><UserFilled /></el-icon>
-          <span>条线用户</span>
-        </el-menu-item>
-        <el-menu-item index="/user-admin">
-          <el-icon><Avatar /></el-icon>
-          <span>用户管理</span>
-        </el-menu-item>
-        <el-menu-item index="/users">
-          <el-icon><User /></el-icon>
-          <span>用户授权</span>
-        </el-menu-item>
-        <el-menu-item index="/services">
-          <el-icon><Menu /></el-icon>
-          <span>接入系统</span>
+        <el-menu-item v-for="item in menus" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.title }}</template>
         </el-menu-item>
       </el-menu>
-      <div class="aside-footer">
-        <span>后端：127.0.0.1:8084</span>
-        <span>控制面：CAS 回环</span>
-      </div>
-    </el-aside>
 
-    <el-container>
-      <el-header class="layout-header">
-        <div class="header-left">
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item>管理台</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ route.meta.title ?? '' }}</el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-        <div class="header-right">
-          <el-tag type="success" effect="plain" size="small">令牌已加载</el-tag>
+      <div class="shell__side-foot">
+        <el-button
+          text
+          :icon="collapsed ? Expand : Fold"
+          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+          @click="collapsed = !collapsed"
+        />
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="shell__header">
+        <el-button
+          class="shell__burger"
+          text
+          :icon="Menu"
+          aria-label="打开菜单"
+          @click="mobileOpen = true"
+        />
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item>管理台</el-breadcrumb-item>
+          <el-breadcrumb-item>{{ route.meta.title ?? '' }}</el-breadcrumb-item>
+        </el-breadcrumb>
+        <div class="shell__header-actions">
+          <el-tooltip :content="dark ? '切换到亮色模式' : '切换到暗色模式'" placement="bottom">
+            <el-button text :icon="dark ? Sunny : Moon" aria-label="切换明暗主题" @click="toggleDark" />
+          </el-tooltip>
           <el-dropdown @command="handleCommand">
-            <span class="user-chip">
-              <el-avatar :size="26" class="user-avatar"><el-icon><Key /></el-icon></el-avatar>
-              <span class="user-name">管理会话</span>
+            <span class="shell__user">
+              <el-avatar :size="28" class="shell__avatar"><el-icon><Key /></el-icon></el-avatar>
+              <span class="ds-body">管理会话</span>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="switch">切换令牌</el-dropdown-item>
+                <el-dropdown-item command="switch" divided>切换令牌</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
         </div>
-      </el-header>
+      </header>
 
-      <el-main class="layout-main">
-        <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+      <main class="shell__content">
+        <router-view v-slot="{ Component, route: r }">
+          <transition name="ds-page" mode="out-in" appear>
+            <component :is="Component" :key="r.path" />
+          </transition>
+        </router-view>
+      </main>
+    </div>
+
+    <el-drawer v-model="mobileOpen" direction="ltr" size="240px" :with-header="false">
+      <el-menu :default-active="route.path" router @select="mobileOpen = false">
+        <el-menu-item v-for="item in menus" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.title }}</template>
+        </el-menu-item>
+      </el-menu>
+    </el-drawer>
+  </div>
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import {
+  ArrowDown,
+  Connection,
+  Expand,
+  Fold,
+  Key,
+  Menu,
+  Moon,
+  Sunny,
+  User,
+  UserFilled,
+} from '@element-plus/icons-vue'
+import { applyTheme } from '../styles/theme'
 import { clearToken } from '../api'
+
+const PRIMARY = '#2F80ED'
 
 const route = useRoute()
 const router = useRouter()
+const collapsed = ref(false)
+const mobileOpen = ref(false)
+const dark = ref(document.documentElement.classList.contains('dark'))
+
+const menus = [
+  { path: '/channels', title: '条线管理', icon: Connection },
+  { path: '/channel-users', title: '条线用户', icon: UserFilled },
+  { path: '/user-admin', title: '用户管理', icon: User },
+  { path: '/users', title: '用户授权', icon: Key },
+  { path: '/services', title: '接入系统', icon: Menu },
+]
+
+const activeMenu = computed(() => route.path)
+
+function toggleDark() {
+  dark.value = !dark.value
+  localStorage.setItem('sso_admin_theme', dark.value ? 'dark' : 'light')
+  applyTheme(PRIMARY, dark.value)
+}
 
 function handleCommand(command) {
   if (command === 'switch') {
@@ -91,99 +132,126 @@ function handleCommand(command) {
 </script>
 
 <style scoped>
-.layout {
-  height: 100%;
+.shell {
+  --side-w: 240px;
+  display: grid;
+  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--el-bg-color-page);
 }
 
-.layout-aside {
+.shell.is-collapsed {
+  --side-w: 64px;
+}
+
+.shell__side {
   display: flex;
   flex-direction: column;
-  background: var(--admin-aside-bg);
+  width: var(--side-w);
+  border-right: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.aside-brand {
+.shell__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 62px;
-  padding: 0 18px;
+  gap: var(--space-2);
+  height: 64px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.shell__logo {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--el-color-primary);
   color: #fff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.brand-title {
-  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  /* 品牌角标为正圆，登记 G2 例外 */
+  border-radius: 50%;
 }
 
-.brand-sub {
-  color: #7d8b9a;
-  font-size: 12px;
-}
-
-.aside-menu {
+.shell__menu {
   flex: 1;
-  border-right: none;
-  padding-top: 8px;
+  border-right: 0;
+  padding-top: var(--space-2);
 }
 
-.aside-menu :deep(.el-menu-item) {
-  height: 44px;
-  line-height: 44px;
+.shell__side-foot {
+  padding: var(--space-2);
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.aside-menu :deep(.el-menu-item.is-active) {
-  margin: 0 8px;
-  border-radius: 6px;
-  background: var(--admin-accent);
-}
-
-.aside-footer {
+.shell__main {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 18px;
-  color: #6f7d8c;
-  font-size: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0;
 }
 
-.layout-header {
+.shell__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 62px;
-  padding: 0 20px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(24, 42, 66, 0.06);
+  gap: var(--space-4);
+  height: 64px;
+  padding: 0 var(--space-6);
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
+  position: sticky;
+  top: 0;
+  z-index: var(--el-index-top);
 }
 
-.header-right {
+.shell__header-actions {
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-2);
 }
 
-.user-chip {
+.shell__user {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   cursor: pointer;
   outline: none;
 }
 
-.user-avatar {
-  background: var(--admin-accent);
+.shell__avatar {
+  background: var(--el-color-primary);
   color: #fff;
 }
 
-.user-name {
-  font-size: 14px;
+.shell__content {
+  flex: 1;
+  min-width: 0;
 }
 
-.layout-main {
-  padding: 20px;
-  overflow-y: auto;
+.shell__burger {
+  display: none;
+}
+
+@media (max-width: 839px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell__side {
+    display: none;
+  }
+
+  .shell__burger {
+    display: inline-flex;
+  }
+
+  .shell__header {
+    padding: 0 var(--space-4);
+  }
 }
 </style>

@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SSO 管理台</title>
+    <script>
+      // 首屏防闪白：在挂载前按 localStorage / 系统偏好预设 html.dark
+      (function () {
+        try {
+          var stored = localStorage.getItem('sso_admin_theme')
+          var dark = stored
+            ? stored === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>
