@@ -13,6 +13,9 @@ node_modules/
 .yarn/
 .vite/
 .cache/
+# npm update-notifier / package-manager cache dirs
+.npm-cache/
+.cache
 
 # npm / yarn / pnpm logs
 npm-debug.log*
