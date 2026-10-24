@@ -2052,6 +2052,7 @@ java -jar target/cas.war   # CAS_DB_PASSWORD / CAS_ADMIN_TOKEN 通过环境变�
 ```
 
 - **TGC 不是 TGT**：TGC 是浏览器 Cookie，TGT 是 CAS 服务端对象；删 TGT 后旧 TGC 失效。
+- **TGC 只写回一次、只在去 CAS 的路上携带**：TGC 仅在首次凭据登录成功的 302 响应里 `Set-Cookie` 写回（免登直通不重写，登出用 `Max-Age=0` 删除）；浏览器只在请求 `https://<cas-host>/cas/**` 时自动携带——host + path（`/cas/`）+ Secure（仅 HTTPS）+ SameSite 四重匹配决定，与请求由谁发起无关。业务系统的 API 请求（如 `/erp/api/**`）path 不匹配，携带的是各自的本地会话凭证（ERPSESSION 等），与 TGC 互不可见——所以业务操作不依赖 CAS 在线，CAS 挂了不影响已登录用户。HTTPS 与 TGC 加密的落地细节见 [CAS-HTTPS启用方案.md](CAS-HTTPS启用方案.md)（含 FAQ-4 的写回/携带时序全解）。
 - **TGT 不是 ST**：TGT 代表全局 SSO 会话，ST 代表一次具体业务登录；ST 通常一次性使用。
 - **CAS 会话不是业务本地会话**：CAS 注销 TGT 只让 CAS 不再签发新票据，业务本地 session 必须靠 SLO 显式删除。
 - **SLO 不是踢下线**：SLO 是协议/机制，踢下线是管理员发起的强制操作；本项目踢下线复用 SLO 并额外枚举全部 TGT。
